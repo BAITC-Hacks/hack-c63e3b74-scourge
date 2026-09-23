@@ -1,0 +1,4 @@
+[
+  {"id": "1", "name": "Демо-профиль А", "city": "Алматы", "categories": ["ведущий"], "available_dates": ["2026-10-01"], "price": 50000, "formats": ["офлайн"], "languages": ["русский", "казахский"], "max_hours": null},
+  {"id": "2", "name": "Демо-профиль Б", "city": "Алматы", "categories": ["ведущий"], "available_dates": ["2026-10-01"], "price": 80000, "formats": ["офлайн"], "languages": ["русский"], "max_hours": 3}
+]
