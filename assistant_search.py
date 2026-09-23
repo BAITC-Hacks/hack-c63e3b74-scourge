@@ -104,7 +104,7 @@ def _card(profile, query, peers, matches, differences=None, proposed_date=None):
         details.append("форматы в профиле: " + ", ".join(profile["formats"]))
     if profile["languages"]:
         details.append("языки в профиле: " + ", ".join(profile["languages"]))
-    details.append("присутствие без ограничения по часам" if profile["max_hours"] is None else
+    details.append("работа не привязана к часам присутствия" if profile["max_hours"] is None else
                    f"присутствие до {amount(profile['max_hours'])} ч")
     if query["date"] is None:
         details.append("дата не указана, доступность не проверялась")
@@ -230,11 +230,25 @@ def assistant_recommend(rows, request, preferences, complete_json):
     counts = Counter(reason["code"] for item in rejected if item["id"] in local_ids
                      for reason in item["reasons"] if reason["code"] != "outside_top_3")
     hard_count = selected["eligible_count"] if constrained else 0
+    status = ("matched" if cards else
+              "category_absent" if query["category"] is not None and not local else "no_matches")
+    if status == "category_absent":
+        location = f" для города «{query['city']}»" if query["city"] else ""
+        message = f"В каталоге{location} нет категории «{query['category']}»."
+        recovery_message = "Выберите другой город или категорию: смена даты и бюджета не добавит профили в этот каталог."
+    elif not constrained:
+        recovery_message = "Укажите, кого ищете, город или другое условие события."
+    elif not local:
+        recovery_message = "В выбранном городе нет профилей. Выберите другой город."
+    else:
+        recovery_message = ("Близкие варианты сохраняют указанные город и категорию. "
+                            "Отличия перечислены на карточках; исходные условия не изменены."
+                            if alternative_cards else "")
     return {
         "cards": cards, "alternatives": alternative_cards,
         "candidates": [item for item in selected["candidates"]
                        if item["profile"]["id"] in {profile["id"] for profile in exact[:3]}],
-        "status": "matched" if cards else "no_matches", "message": message,
+        "status": status, "message": message,
         "request": query, "preferences": preferences, "request_date": query["date"],
         "total": len(profiles), "eligible_count": len(exact), "hard_match_count": hard_count,
         "city_category_count": len(local), "rejected": sorted(rejected, key=lambda item: item["id"]),
@@ -244,7 +258,5 @@ def assistant_recommend(rows, request, preferences, complete_json):
         "ranking_rule": ("Точные совпадения: все указанные условия и подтверждённые пожелания, затем цена и id. "
                          "Близкие варианты: меньше отличий, ближе дата, меньше превышение бюджета, больше подтверждённых пожеланий, цена и id."),
         "suggestions": [],
-        "recovery_message": ("Близкие варианты сохраняют указанные город и категорию. "
-                             "Отличия перечислены на карточках; исходные условия не изменены."
-                             if alternative_cards else ""),
+        "recovery_message": recovery_message,
     }

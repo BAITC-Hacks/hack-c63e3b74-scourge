@@ -53,6 +53,22 @@ class AssistantSearchTests(unittest.TestCase):
         self.assertIn("50 000", difference["message"])
         self.assertEqual(assistant_recommend([profile(price=0)], {"budget": 0}, [], None)["eligible_count"], 1)
 
+    def test_null_hours_do_not_promise_unlimited_presence(self):
+        result = assistant_recommend([profile()], {"category": "ведущий"}, [], None)
+        text = result['cards'][0]['explanation']
+        self.assertIn('работа не привязана к часам присутствия', text)
+        self.assertNotIn('присутствие без ограничения', text)
+
+    def test_absent_category_is_distinct_from_unmet_conditions(self):
+        rows = [profile()]
+        absent = assistant_recommend(rows, {'city': 'Алматы', 'category': 'флорист'}, [], None)
+        blocked = assistant_recommend(rows, {'city': 'Алматы', 'category': 'ведущий', 'budget': 0}, [], None)
+        self.assertEqual(absent['status'], 'category_absent')
+        self.assertEqual(absent['alternatives'], [])
+        self.assertIn('нет категории «флорист»', absent['message'])
+        self.assertIn('Выберите другой город или категорию', absent['recovery_message'])
+        self.assertEqual(blocked['status'], 'no_matches')
+
     def test_empty_request_never_shows_arbitrary_catalog(self):
         result = assistant_recommend([profile()], {"budget": None, "languages": []}, [], None)
         self.assertEqual(result["cards"], [])
