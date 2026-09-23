@@ -74,6 +74,8 @@ def explain_card(candidate, peers):
     if excerpt:
         details.append(f"фрагмент описания: «{excerpt.rstrip('.!?')}»")
     notices = []
+    if p.get("team_added"):
+        notices.append("Добавлен командой")
     if p["synthetic"]:
         notices.append("Синтетический профиль")
     if p["price_imputed"]:
@@ -86,6 +88,7 @@ def explain_card(candidate, peers):
         "currency": p["currency"], "explanation": first + ". " + "; ".join(details) + ".",
         "description_excerpt": excerpt, "notices": notices,
         "synthetic": p["synthetic"],
+        "team_added": p.get("team_added", False),
     }
 
 

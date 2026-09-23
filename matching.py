@@ -96,6 +96,7 @@ def normalize_profile(row):
         "city_imputed": flag(row.get("city_imputed")),
         "price_imputed": flag(row.get("price_imputed")),
         "synthetic": flag(row.get("synthetic")),
+        "team_added": flag(row.get("team_added", False)),
         "description": str(row.get("description") or "").strip(),
     }
 
