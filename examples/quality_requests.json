@@ -1,0 +1,78 @@
+[
+  {
+    "id": "dense",
+    "request": {
+      "city": "Алматы",
+      "category": "Ведущий",
+      "date": "2026-10-06",
+      "budget": 3000000,
+      "format": "свадьба",
+      "language": "русский",
+      "duration_hours": 5
+    },
+    "expected_status": "matched",
+    "expected_ids": [
+      "HK-44923",
+      "HK-35215",
+      "HK-42352"
+    ]
+  },
+  {
+    "id": "other_date",
+    "request": {
+      "city": "Алматы",
+      "category": "Ведущий",
+      "date": "2026-10-01",
+      "budget": 3000000,
+      "format": "свадьба",
+      "language": "русский",
+      "duration_hours": 5
+    },
+    "expected_status": "matched",
+    "expected_ids": [
+      "HK-44923",
+      "HK-42352"
+    ]
+  },
+  {
+    "id": "rare",
+    "request": {
+      "city": "алматы",
+      "category": "флорист",
+      "date": "2026-10-04",
+      "budget": 3000000,
+      "format": "свадьба"
+    },
+    "expected_status": "matched",
+    "expected_ids": [
+      "HK-39372",
+      "HK-90001"
+    ]
+  },
+  {
+    "id": "no_matches",
+    "request": {
+      "city": "Алматы",
+      "category": "Ведущий",
+      "date": "2026-10-06",
+      "budget": 0,
+      "format": "свадьба",
+      "language": "русский",
+      "duration_hours": 5
+    },
+    "expected_status": "no_matches",
+    "expected_ids": []
+  },
+  {
+    "id": "category_absent",
+    "request": {
+      "city": "Зарубежье",
+      "category": "флорист",
+      "date": "2026-10-04",
+      "budget": 3000000,
+      "format": "свадьба"
+    },
+    "expected_status": "category_absent",
+    "expected_ids": []
+  }
+]
