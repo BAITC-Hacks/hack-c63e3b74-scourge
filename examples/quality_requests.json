@@ -74,5 +74,33 @@
     },
     "expected_status": "category_absent",
     "expected_ids": []
+  },
+  {
+    "id": "venue",
+    "request": {
+      "city": "Алматы",
+      "category": "Банкетный зал",
+      "date": "2026-11-14",
+      "budget": 3000000,
+      "format": "свадьба"
+    },
+    "expected_status": "matched",
+    "expected_ids": [
+      "HK-64395"
+    ]
+  },
+  {
+    "id": "december",
+    "request": {
+      "city": "Алматы",
+      "category": "Ведущий",
+      "date": "2026-12-19",
+      "budget": 3000000,
+      "format": "корпоратив"
+    },
+    "expected_status": "matched",
+    "expected_ids": [
+      "HK-35215"
+    ]
   }
 ]

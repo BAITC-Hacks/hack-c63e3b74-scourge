@@ -54,6 +54,31 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(self.request('POST', '/api/recommend', body)[0], 400)
         self.assertEqual(self.request('POST', '/api/recommend', ' ' * 16385)[0], 413)
 
+    def test_comparison_over_http(self):
+        query = json.loads((ROOT / 'examples/quality_requests.json').read_text())[0]['request']
+        status, _, body = self.request('POST', '/api/compare', json.dumps(dict(query, compare_date='2026-10-01')))
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual([r['request_date'] for r in result['results']], ['2026-10-06', '2026-10-01'])
+        self.assertEqual(result['changes'][0]['id'], 'HK-35215')
+        self.assertIn('date_busy', result['changes'][0]['states'][1]['codes'])
+        for value in (None, '', '2026-02-30', 20261001):
+            with self.subTest(value=value):
+                status, _, _ = self.request('POST', '/api/compare', json.dumps(dict(query, compare_date=value)))
+                self.assertEqual(status, 400)
+
+    def test_recovery_can_be_applied_over_http(self):
+        cases = json.loads((ROOT / 'examples/quality_requests.json').read_text())
+        query = next(case['request'] for case in cases if case['id'] == 'no_matches')
+        _, _, body = self.request('POST', '/api/recommend', json.dumps(query))
+        suggestion = json.loads(body)['suggestions'][0]
+        self.assertEqual(suggestion['field'], 'budget')
+        status, _, body = self.request('POST', '/api/recommend', json.dumps(suggestion['request']))
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result['status'], 'matched')
+        self.assertEqual(result['eligible_count'], suggestion['eligible_count'])
+
     def test_team_provenance_survives_matching(self):
         row = dict(self.profiles[0], team_added=True, synthetic=True)
         query = dict(city=row['city'], category=row['categories'][0], date='2026-10-01',

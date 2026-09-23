@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from explanations import recommend
+from explanations import compare_dates, recommend
 from matching import normalize_profiles
 
 ROOT = Path(__file__).resolve().parent
@@ -68,7 +68,8 @@ def make_handler(profiles):
             self.send(200, (ROOT / "web" / filename).read_bytes(), mime + "; charset=utf-8")
 
         def do_POST(self):
-            if urlsplit(self.path).path != "/api/recommend":
+            path = urlsplit(self.path).path
+            if path not in ("/api/recommend", "/api/compare"):
                 return self.send(404, {"error": "Метод не найден"})
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.send(415, {"error": "Ожидается application/json"})
@@ -77,7 +78,14 @@ def make_handler(profiles):
                 if not 0 < length <= 16384:
                     return self.send(413, {"error": "Размер запроса должен быть от 1 до 16384 байт"})
                 payload = json.loads(self.rfile.read(length))
-                result = recommend(profiles, validate_request(payload))
+                request = validate_request(payload)
+                if path == "/api/compare":
+                    other_date = request.get("compare_date")
+                    if not isinstance(other_date, str) or not 0 < len(other_date) <= 100:
+                        raise ValueError("Укажите compare_date для сравнения дат")
+                    result = compare_dates(profiles, request, other_date)
+                else:
+                    result = recommend(profiles, request)
             except (ValueError, KeyError, TypeError, OverflowError, RecursionError) as exc:
                 return self.send(400, {"error": "Некорректные параметры: " + str(exc)[:180]})
             self.send(200, result)

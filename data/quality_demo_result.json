@@ -10,7 +10,7 @@
       "language": "русский",
       "duration_hours": 5
     },
-    "elapsed_ms": 19.13,
+    "elapsed_ms": 45.95,
     "status": "matched",
     "message": "В городе «алматы» профилей категории «ведущий»: 10. Исключены на 2026-10-06: 1 — заняты на выбранную дату; 4 — не указан нужный формат. Подходят: 5; показаны первые 3.",
     "cards": [
@@ -68,7 +68,9 @@
     "exclusion_counts": {
       "format_mismatch": 4,
       "date_busy": 1
-    }
+    },
+    "suggestions": [],
+    "recovery_message": ""
   },
   {
     "id": "other_date",
@@ -81,7 +83,7 @@
       "language": "русский",
       "duration_hours": 5
     },
-    "elapsed_ms": 15.64,
+    "elapsed_ms": 34.3,
     "status": "matched",
     "message": "В городе «алматы» профилей категории «ведущий»: 10. Исключены на 2026-10-01: 6 — заняты на выбранную дату; 2 — не указан нужный формат. Подходят: 2; это все доступные варианты по заданным условиям.",
     "cards": [
@@ -125,7 +127,9 @@
     "exclusion_counts": {
       "date_busy": 6,
       "format_mismatch": 2
-    }
+    },
+    "suggestions": [],
+    "recovery_message": ""
   },
   {
     "id": "rare",
@@ -136,7 +140,7 @@
       "budget": 3000000,
       "format": "свадьба"
     },
-    "elapsed_ms": 17.81,
+    "elapsed_ms": 35.38,
     "status": "matched",
     "message": "В городе «алматы» профилей категории «флорист»: 2. Подходят: 2; это все доступные варианты по заданным условиям.",
     "cards": [
@@ -179,7 +183,9 @@
       "indistinguishable_ids": [],
       "message": ""
     },
-    "exclusion_counts": {}
+    "exclusion_counts": {},
+    "suggestions": [],
+    "recovery_message": ""
   },
   {
     "id": "no_matches",
@@ -192,7 +198,7 @@
       "language": "русский",
       "duration_hours": 5
     },
-    "elapsed_ms": 14.58,
+    "elapsed_ms": 145.29,
     "status": "no_matches",
     "message": "В городе «алматы» профилей категории «ведущий»: 10. Исключены на 2026-10-06: 1 — заняты на выбранную дату; 9 — указанная цена выше бюджета. Категория есть, но никто не подходит по заданным условиям.",
     "cards": [],
@@ -205,7 +211,26 @@
     "exclusion_counts": {
       "over_budget": 9,
       "date_busy": 1
-    }
+    },
+    "suggestions": [
+      {
+        "field": "budget",
+        "value": 650000.0,
+        "request": {
+          "city": "Алматы",
+          "category": "Ведущий",
+          "date": "2026-10-06",
+          "budget": 650000.0,
+          "format": "свадьба",
+          "language": "русский",
+          "duration_hours": 5
+        },
+        "label": "Бюджет 650 000 ₸ — по цене «от»",
+        "eligible_count": 1,
+        "message": "Подходящих профилей: 1. Остальные условия сохранены."
+      }
+    ],
+    "recovery_message": "Можно изменить одно условие. Каждый вариант ниже проверен по каталогу; исходный запрос изменится только после нажатия."
   },
   {
     "id": "category_absent",
@@ -216,7 +241,7 @@
       "budget": 3000000,
       "format": "свадьба"
     },
-    "elapsed_ms": 14.76,
+    "elapsed_ms": 32.64,
     "status": "category_absent",
     "message": "В каталоге для города «зарубежье» нет категории «флорист».",
     "cards": [],
@@ -226,6 +251,92 @@
       "indistinguishable_ids": [],
       "message": ""
     },
-    "exclusion_counts": {}
+    "exclusion_counts": {},
+    "suggestions": [],
+    "recovery_message": "Выберите другой город или категорию: смена даты и бюджета не добавит профили в этот каталог."
+  },
+  {
+    "id": "venue",
+    "request": {
+      "city": "Алматы",
+      "category": "Банкетный зал",
+      "date": "2026-11-14",
+      "budget": 3000000,
+      "format": "свадьба"
+    },
+    "elapsed_ms": 33.54,
+    "status": "matched",
+    "message": "В городе «алматы» профилей категории «банкетный зал»: 7. Исключены на 2026-11-14: 5 — заняты на выбранную дату; 1 — указанная цена выше бюджета. Подходят: 1; это все доступные варианты по заданным условиям.",
+    "cards": [
+      {
+        "id": "HK-64395",
+        "name": "Иноскэ Хашибира",
+        "category": "банкетный зал",
+        "city": "алматы",
+        "price": 2500000.0,
+        "price_kind": "starting",
+        "currency": "KZT",
+        "explanation": "Цена от 2 500 000 ₸ не превышает бюджет 3 000 000 ₸; итоговую стоимость нужно уточнить. Формат: свадьба; языки: английский, русский; до 8 ч на площадке; 2026-11-14 — дата не отмечена занятой в календаре; фрагмент описания: «Nerima Terrace – стильная панорамная локация в Алматы с захватывающим видом на город и горы».",
+        "description_excerpt": "Nerima Terrace – стильная панорамная локация в Алматы с захватывающим видом на город и горы.",
+        "notices": [
+          "Цена заполнена при подготовке датасета",
+          "Город заполнен при подготовке датасета"
+        ],
+        "synthetic": false,
+        "team_added": false
+      }
+    ],
+    "eligible_count": 1,
+    "quality": {
+      "distinct_explanations": true,
+      "indistinguishable_ids": [],
+      "message": ""
+    },
+    "exclusion_counts": {
+      "date_busy": 5,
+      "over_budget": 1
+    },
+    "suggestions": [],
+    "recovery_message": ""
+  },
+  {
+    "id": "december",
+    "request": {
+      "city": "Алматы",
+      "category": "Ведущий",
+      "date": "2026-12-19",
+      "budget": 3000000,
+      "format": "корпоратив"
+    },
+    "elapsed_ms": 32.65,
+    "status": "matched",
+    "message": "В городе «алматы» профилей категории «ведущий»: 10. Исключены на 2026-12-19: 9 — заняты на выбранную дату. Подходят: 1; это все доступные варианты по заданным условиям.",
+    "cards": [
+      {
+        "id": "HK-35215",
+        "name": "Кики",
+        "category": "ведущий",
+        "city": "алматы",
+        "price": 900000.0,
+        "price_kind": "starting",
+        "currency": "KZT",
+        "explanation": "Цена от 900 000 ₸ не превышает бюджет 3 000 000 ₸; итоговую стоимость нужно уточнить. Формат: корпоратив; языки: английский, казахский, русский; до 10 ч на площадке; 2026-12-19 — дата не отмечена занятой в календаре; фрагмент описания: «Работает на казахском, русском и английском языках».",
+        "description_excerpt": "Работает на казахском, русском и английском языках.",
+        "notices": [],
+        "synthetic": false,
+        "team_added": false
+      }
+    ],
+    "eligible_count": 1,
+    "quality": {
+      "distinct_explanations": true,
+      "indistinguishable_ids": [],
+      "message": ""
+    },
+    "exclusion_counts": {
+      "date_busy": 9
+    },
+    "suggestions": [],
+    "recovery_message": ""
   }
 ]

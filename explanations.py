@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 from matching import date, label, select_candidates
+from recovery import recovery_suggestions
 
 
 REASONS = {
@@ -132,12 +133,55 @@ def recommend(rows, request):
     duplicate_texts = Counter(signatures)
     indistinguishable = [card["id"] for card, signature in zip(cards, signatures)
                          if duplicate_texts[signature] > 1]
-    return dict(result, cards=cards, status=status, message=message,
+    response = dict(result, cards=cards, status=status, message=message,
+                request_date=day,
                 city_category_count=local_count, exclusion_counts=dict(counts),
                 exclusion_counting="Каждый профиль учтён один раз по первой причине: календарь, бюджет, формат, язык, часы.",
                 quality={"distinct_explanations": not indistinguishable,
                          "indistinguishable_ids": indistinguishable,
                          "message": "Недостаточно различающих фактов в профилях." if indistinguishable else ""})
+    response["suggestions"] = recovery_suggestions(rows, request, response)
+    if status == "category_absent":
+        response["recovery_message"] = "Выберите другой город или категорию: смена даты и бюджета не добавит профили в этот каталог."
+    elif status == "no_matches":
+        response["recovery_message"] = (
+            "Можно изменить одно условие. Каждый вариант ниже проверен по каталогу; исходный запрос изменится только после нажатия."
+            if response["suggestions"] else
+            "Проверка дат в пределах недели, бюджета, языка и длительности не дала вариантов при изменении одного условия. Проверьте сочетание условий; формат мероприятия автоматически не меняется.")
+    else:
+        response["recovery_message"] = ""
+    return response
+
+
+def compare_dates(rows, request, other_date):
+    """Объясняет изменения состава тройки, сохраняя остальные условия."""
+    first = recommend(rows, request)
+    second = recommend(rows, dict(request, date=date(other_date)))
+    results = [first, second]
+    selected = [{card["id"] for card in result["cards"]} for result in results]
+    rejected = [{item["id"]: item["reasons"] for item in result["rejected"]}
+                for result in results]
+    labels = dict(REASONS, date_busy="дата занята по календарю",
+                  outside_top_3="подходит по условиям, но находится ниже первой тройки")
+    cards = {card["id"]: card for result in results for card in result["cards"]}
+    changes = []
+    for identifier, card in cards.items():
+        if (identifier in selected[0]) == (identifier in selected[1]):
+            continue
+        states = []
+        for index, result in enumerate(results):
+            codes = (["selected"] if identifier in selected[index] else
+                     [reason["code"] for reason in rejected[index][identifier]])
+            detail = "; ".join("в подборке" if code == "selected" else labels[code]
+                               for code in codes)
+            states.append({"date": result["request_date"], "codes": codes, "message": detail})
+        changes.append({"id": identifier, "name": card["name"], "states": states,
+                        "message": card["name"] + ": " + "; ".join(
+                            f"{state['date']} — {state['message']}" for state in states) + "."})
+    message = ("Изменена только дата. Вот почему изменился состав подборки." if changes else
+               "На обе даты нет подходящих профилей. Причины указаны под каждой датой."
+               if not cards else "На обе даты состав подборки одинаковый.")
+    return {"results": results, "changes": changes, "message": message}
 
 
 def main():
