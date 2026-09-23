@@ -9,6 +9,7 @@ const aiBrief = document.querySelector('#ai-brief');
 const aiParse = document.querySelector('#ai-parse');
 const aiStatus = document.querySelector('#ai-status');
 const aiFeedback = document.querySelector('#ai-feedback');
+const aiSummary = document.querySelector('#ai-summary');
 const preferencesInput = document.querySelector('#style-preferences');
 const names = {dense:'Много вариантов', rare:'Редкая категория', no_matches:'Пустая выдача', category_absent:'Нет категории', venue:'Банкетный зал', december:'Декабрьский сезон'};
 let busy = false;
@@ -28,7 +29,14 @@ function compareMode(value) {
   document.querySelector('#compare-note').hidden = !value;
   secondDate.required = value;
 }
-toggle.addEventListener('change', () => compareMode(toggle.checked));
+toggle.addEventListener('change', () => {
+  if (busy) return;
+  compareMode(toggle.checked);
+  clearBriefFeedback();
+  results.replaceChildren();
+  statusNode.className = '';
+  statusNode.textContent = 'Запустите подбор с выбранными условиями формы.';
+});
 
 function setBusy(value) {
   busy = value;
@@ -87,13 +95,51 @@ function readPreferences() {
   return preferences;
 }
 
+function clearBriefFeedback() {
+  aiFeedback.replaceChildren();
+  aiFeedback.hidden = true;
+  aiSummary.replaceChildren();
+  aiSummary.hidden = true;
+  aiStatus.className = 'ai-status';
+  aiStatus.textContent = aiAvailable ? 'Найдём по описанию. Поля ручного подбора не влияют на этот поиск.' : 'AI сейчас недоступен. Заполните форму ниже — обычный подбор работает.';
+}
+
 function resetBrief() {
   preferencesInput.value = '';
   aiBrief.value = '';
-  aiFeedback.replaceChildren();
-  aiFeedback.hidden = true;
-  aiStatus.className = 'ai-status';
-  aiStatus.textContent = aiAvailable ? 'Опишите событие — перенесём условия в форму для проверки.' : 'AI сейчас недоступен. Заполните форму ниже — обычный подбор работает.';
+  clearBriefFeedback();
+  results.replaceChildren();
+  results.className = '';
+}
+
+function formatDate(day) {
+  return day ? new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'}) : 'Без ограничения даты';
+}
+
+function renderBriefSummary(parsed) {
+  const request = parsed.request || {};
+  const languages = Array.isArray(request.languages) ? request.languages : (request.language ? [request.language] : []);
+  aiSummary.replaceChildren(el('h3', 'Учтено из описания'));
+  const fields = [
+    ['Город', request.city || 'не ограничен'],
+    ['Категория', request.category || 'не ограничена'],
+    ['Мероприятие', request.format || 'не ограничено'],
+    ['Дата', request.date ? formatDate(request.date) : 'не указана — без ограничения даты'],
+    ['Бюджет', request.budget == null ? 'не ограничен' : `до ${new Intl.NumberFormat('ru-RU').format(request.budget)} ₸`],
+    ['Часы', request.duration_hours == null ? 'не ограничены' : String(request.duration_hours)],
+    ['Языки', languages.length ? languages.join(', ') : 'не ограничены'],
+  ];
+  const list = el('dl', undefined, 'brief-conditions');
+  fields.forEach(([label, value]) => {
+    const item = el('div');
+    item.append(el('dt', label), el('dd', value));
+    list.append(item);
+  });
+  aiSummary.append(list);
+  if (Array.isArray(parsed.preferences) && parsed.preferences.length) {
+    aiSummary.append(el('p', `Пожелания: ${parsed.preferences.join('; ')}.`));
+  }
+  aiSummary.hidden = false;
 }
 
 function renderStyleMatches(article, matches) {
@@ -110,25 +156,48 @@ function renderStyleMatches(article, matches) {
   article.append(section);
 }
 
-function render(data, day) {
+function renderCard(card, alternative = false) {
+  const article = el('article', undefined, alternative ? 'card alternative-card' : 'card');
+  const top = el('div', undefined, 'card-top');
+  const identity = el('div');
+  identity.append(el('h4', card.name), el('div', `${card.category} · ${card.city} · ${card.id}`, 'meta'));
+  top.append(identity, el('div', `${card.price_kind === 'starting' ? 'от ' : ''}${new Intl.NumberFormat('ru-RU').format(card.price)} ₸`, 'price'));
+  article.append(top);
+  const badges = el('div', undefined, 'badges');
+  (Array.isArray(card.notices) ? card.notices : []).forEach(notice => badges.append(el('span', notice, notice === 'Добавлен командой' ? 'badge team' : 'badge')));
+  article.append(badges);
+  if (alternative) {
+    const differences = el('div', undefined, 'differences');
+    differences.append(el('p', 'ОТЛИЧИЯ ОТ ЗАПРОСА', 'reason-heading'));
+    if (card.proposed_date) differences.append(el('p', `Предлагаемая дата: ${formatDate(card.proposed_date)}`, 'proposed-date'));
+    const list = el('ul');
+    (Array.isArray(card.differences) ? card.differences : []).forEach(difference => list.append(el('li', difference.message)));
+    differences.append(list);
+    article.append(differences);
+  }
+  article.append(el('p', alternative ? 'ЧТО СОВПАДАЕТ' : 'ПОЧЕМУ ПОДХОДИТ', 'reason-heading'), el('p', card.explanation, 'explanation'));
+  renderStyleMatches(article, card.style_matches);
+  return article;
+}
+
+function render(data, day, fromBrief = false) {
   const section = el('section', undefined, 'result-group');
-  section.append(el('h3', new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'})), el('p', data.message, 'summary'));
+  section.append(el('h3', formatDate(day)), el('p', data.message, 'summary'));
+  const exactCards = Array.isArray(data.cards) ? data.cards : [];
+  const alternatives = !exactCards.length && Array.isArray(data.alternatives) ? data.alternatives : [];
+  if (fromBrief && exactCards.length) section.append(el('h3', 'Подходящие профили'));
   const cards = el('div', undefined, 'cards');
-  data.cards.forEach(card => {
-    const article = el('article', undefined, 'card');
-    const top = el('div', undefined, 'card-top');
-    const identity = el('div');
-    identity.append(el('h4', card.name), el('div', `${card.category} · ${card.city} · ${card.id}`, 'meta'));
-    top.append(identity, el('div', `${card.price_kind === 'starting' ? 'от ' : ''}${new Intl.NumberFormat('ru-RU').format(card.price)} ₸`, 'price'));
-    article.append(top);
-    const badges = el('div', undefined, 'badges');
-    card.notices.forEach(notice => badges.append(el('span', notice, notice === 'Добавлен командой' ? 'badge team' : 'badge')));
-    article.append(badges, el('p', 'ПОЧЕМУ ПОДХОДИТ', 'reason-heading'), el('p', card.explanation, 'explanation'));
-    renderStyleMatches(article, card.style_matches);
-    cards.append(article);
-  });
+  exactCards.forEach(card => cards.append(renderCard(card)));
   section.append(cards);
-  if (!data.cards.length) {
+  if (alternatives.length) {
+    const nearby = el('section', undefined, 'alternatives');
+    nearby.append(el('h3', 'Ближайшие варианты — отличаются от запроса'), el('p', 'Проверьте отличия в каждой карточке. Эти варианты не выполняют все указанные требования.', 'alternative-note'));
+    const options = el('div', undefined, 'cards');
+    alternatives.forEach(card => options.append(renderCard(card, true)));
+    nearby.append(options);
+    section.append(nearby);
+  }
+  if (!exactCards.length && !alternatives.length) {
     const recovery = el('div', undefined, 'empty');
     recovery.append(el('p', data.recovery_message || 'Попробуйте другую дату, бюджет или условия подбора.'));
     for (const suggestion of (Array.isArray(data.suggestions) ? data.suggestions : [])) {
@@ -136,20 +205,28 @@ function render(data, day) {
       const button = el('button', suggestion.label);
       button.type = 'button';
       button.disabled = busy;
-      button.addEventListener('click', () => { if (busy) return; fill(suggestion.request); compareMode(false); search(); });
+      button.addEventListener('click', () => { if (busy) return; resetBrief(); fill(suggestion.request); compareMode(false); search(); });
       item.append(button, el('p', suggestion.message, 'hint'));
       recovery.append(item);
     }
     section.append(recovery);
   }
-  if (data.quality.message) section.append(el('p', data.quality.message));
-  const detail = el('details');
-  detail.append(el('summary', 'Почему другие профили не вошли'), el('p', data.exclusion_counting));
-  const labels = {date_outside_calendar:'Нет календаря на эту дату', date_busy:'Заняты', date_unavailable:'Нет свободной даты', over_budget:'Выше бюджета', format_mismatch:'Другой формат', language_mismatch:'Другой язык', duration_exceeded:'Недостаточно часов'};
-  const list = el('ul');
-  Object.entries(data.exclusion_counts).forEach(([key, count]) => list.append(el('li', `${labels[key] || key}: ${count}`)));
-  detail.append(list, el('p', `Всего в каталоге: ${data.total}. В выбранных городе и категории: ${data.city_category_count}. Подходят: ${data.eligible_count}.`));
-  section.append(detail);
+  if (data.quality && data.quality.message) section.append(el('p', data.quality.message));
+  if (data.exclusion_counts) {
+    const detail = el('details');
+    detail.append(el('summary', 'Почему другие профили не вошли'));
+    if (data.exclusion_counting) detail.append(el('p', data.exclusion_counting));
+    const labels = {date_outside_calendar:'Нет календаря на эту дату', date_unknown:'Доступность неизвестна', date_busy:'Заняты', date_unavailable:'Нет свободной даты', over_budget:'Выше бюджета', format_mismatch:'Другой формат', language_mismatch:'Другой язык', duration_exceeded:'Недостаточно часов', preference_unconfirmed:'Пожелание не подтверждено описанием', no_requirements:'Условия поиска не указаны'};
+    const list = el('ul');
+    Object.entries(data.exclusion_counts).forEach(([key, count]) => list.append(el('li', `${labels[key] || key}: ${count}`)));
+    detail.append(list);
+    const counts = [];
+    if (data.total != null) counts.push(`Всего в каталоге: ${data.total}.`);
+    if (data.city_category_count != null) counts.push(`В выбранных городе и категории: ${data.city_category_count}.`);
+    if (data.eligible_count != null) counts.push(`Подходят: ${data.eligible_count}.`);
+    detail.append(el('p', counts.join(' ')));
+    section.append(detail);
+  }
   return section;
 }
 
@@ -164,7 +241,7 @@ function renderComparison(data) {
   return section;
 }
 
-async function parseBrief() {
+async function searchBrief() {
   if (busy || !aiAvailable || !aiForm.reportValidity()) return;
   if (!aiBrief.value.trim()) {
     aiStatus.textContent = 'Сначала опишите ваше событие.';
@@ -173,29 +250,39 @@ async function parseBrief() {
   const text = aiBrief.value.trim();
   setBusy(true);
   aiStatus.className = 'ai-status';
-  aiStatus.textContent = 'Разбираем описание и пожелания…';
+  aiStatus.textContent = 'Ищем по описанию и проверяем пожелания…';
   aiFeedback.replaceChildren();
   aiFeedback.hidden = true;
+  aiSummary.replaceChildren();
+  aiSummary.hidden = true;
+  results.replaceChildren();
+  results.className = '';
+  statusNode.className = '';
+  statusNode.textContent = 'AI подбирает профили только по требованиям в описании…';
   try {
-    const data = await api('/api/ai/parse', post({text}));
-    fill(data.request);
-    compareMode(false);
-    preferencesInput.value = (data.preferences || []).join('\n');
-    results.replaceChildren();
-    statusNode.className = '';
-    statusNode.textContent = 'Условия обновлены из описания. Проверьте форму и нажмите «Подобрать команду».';
-    aiStatus.textContent = data.ready ? 'Описание разобрано. Проверьте заполненные условия и пожелания перед подбором.' : 'Нужно уточнить условия. Заполните недостающие поля в форме ниже.';
-    const feedback = [...(data.questions || []), ...(data.warnings || [])];
+    const data = await api('/api/ai/search', post({text}));
+    const parsed = data.parsed;
+    renderBriefSummary(parsed);
+    const feedback = [...(parsed.questions || []), ...(parsed.warnings || [])];
     feedback.forEach(message => aiFeedback.append(el('li', message)));
     aiFeedback.hidden = feedback.length === 0;
+    if (!parsed.ready || !data.result) {
+      aiStatus.textContent = 'Нужно уточнить описание. Дополните текст выше и снова нажмите «Найти по описанию».';
+      statusNode.textContent = 'Ждём уточнения неоднозначных условий. Поиск ещё не выполнен.';
+      return;
+    }
+    results.append(render(data.result, data.result.request_date, true));
+    aiStatus.textContent = 'Поиск завершён. Учтены только требования из описания; незаданные условия не ограничивают выбор.';
+    statusNode.textContent = [data.result.ai && data.result.ai.message, data.result.ranking_rule].filter(Boolean).join(' ') || 'Подбор по описанию готов.';
   } catch (error) {
-    aiStatus.textContent = `Не удалось разобрать описание: ${error.message}. Условия можно заполнить вручную.`;
+    aiStatus.textContent = `Не удалось выполнить поиск по описанию: ${error.message}. Условия можно заполнить вручную.`;
     aiStatus.className = 'ai-status error';
+    statusNode.textContent = 'Подбор по описанию не выполнен. Повторите запрос или воспользуйтесь ручной формой.';
   } finally {
     setBusy(false);
   }
 }
-aiForm.addEventListener('submit', event => { event.preventDefault(); parseBrief(); });
+aiForm.addEventListener('submit', event => { event.preventDefault(); searchBrief(); });
 
 async function search() {
   if (busy || !form.reportValidity()) return;
@@ -211,6 +298,7 @@ async function search() {
   }
   const useAI = !comparing && aiAvailable && preferences.length > 0;
   const dates = comparing ? [request.date, secondDate.value] : [request.date];
+  clearBriefFeedback();
   setBusy(true);
   statusNode.className = '';
   statusNode.textContent = useAI ? 'Проверяем условия и ищем подтверждения вашим пожеланиям…' : 'Проверяем условия и календарь…';

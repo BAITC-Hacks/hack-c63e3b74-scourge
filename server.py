@@ -10,6 +10,7 @@ from matching import normalize_profiles
 from ai_client import AIError, complete_json, public_status
 from ai_brief import parse_brief, strings
 from ai_ranking import recommend_with_style
+from assistant_search import assistant_recommend
 
 ROOT = Path(__file__).resolve().parent
 
@@ -74,7 +75,7 @@ def make_handler(profiles):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/recommend", "/api/compare", "/api/ai/parse", "/api/ai/recommend"):
+            if path not in ("/api/recommend", "/api/compare", "/api/ai/parse", "/api/ai/recommend", "/api/ai/search"):
                 return self.send(404, {"error": "Метод не найден"})
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.send(415, {"error": "Ожидается application/json"})
@@ -83,12 +84,19 @@ def make_handler(profiles):
                 if not 0 < length <= 16384:
                     return self.send(413, {"error": "Размер запроса должен быть от 1 до 16384 байт"})
                 payload = json.loads(self.rfile.read(length))
-                if path == "/api/ai/parse":
+                if path in ("/api/ai/parse", "/api/ai/search"):
                     if not isinstance(payload, dict):
                         raise ValueError("Запрос должен быть JSON-объектом")
-                    result = parse_brief(profiles, payload.get('text'), complete_json)
-                    result['model'] = public_status()['model']
-                    return self.send(200, result)
+                    parsed = parse_brief(profiles, payload.get('text'), complete_json,
+                                         partial=path == '/api/ai/search')
+                    parsed['model'] = public_status()['model']
+                    if path == '/api/ai/parse':
+                        return self.send(200, parsed)
+                    result = (assistant_recommend(profiles, parsed['request'], parsed['preferences'], complete_json)
+                              if parsed['ready'] else None)
+                    if result is not None:
+                        result['ai']['model'] = public_status()['model']
+                    return self.send(200, {'parsed': parsed, 'result': result})
                 request = validate_request(payload)
                 if path == "/api/compare":
                     other_date = request.get("compare_date")

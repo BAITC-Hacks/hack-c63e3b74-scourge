@@ -140,24 +140,37 @@ def compare_sources(excel_rows, html_rows):
     }
 
 
-def select_candidates(rows, request):
-    profiles = normalize_profiles(rows)
+def normalize_request(request, *, partial=False):
+    """В частичном запросе отсутствующее поле не создаёт ограничения."""
+    if not isinstance(request, dict):
+        raise ValueError("request: требуется объект")
     languages = request.get("languages", [])
     if languages is None:
         languages = []
     if not isinstance(languages, list) or len(languages) > 10:
         raise ValueError("languages: требуется массив до 10 языков")
     languages = [label(value) for value in languages]
-    query = {
-        "city": label(request["city"]),
-        "category": label(request["category"]),
-        "date": date(request["date"]),
-        "budget": number(request["budget"], "budget"),
-        "format": label(request["format"]),
+    def required(key, transform):
+        value = request.get(key) if partial else request[key]
+        return None if partial and value is None else transform(value)
+
+    return {
+        "city": required("city", label),
+        "category": required("category", label),
+        "date": required("date", date),
+        "budget": required("budget", lambda value: number(value, "budget")),
+        "format": required("format", label),
         "language": label(request["language"]) if request.get("language") is not None else None,
         "languages": sorted(set(languages)),
         "duration_hours": number(request.get("duration_hours"), "duration_hours", nullable=True),
     }
+
+
+def select_candidates(rows, request, *, partial=False, limit=3):
+    profiles = normalize_profiles(rows)
+    query = normalize_request(request, partial=partial)
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("limit: требуется положительное целое число или null")
     accepted, rejected = [], []
     for profile in profiles:
         reasons = []
@@ -166,16 +179,23 @@ def select_candidates(rows, request):
             if not ok:
                 reasons.append({"code": code, "field": field, "expected": expected, "actual": actual})
 
-        check(profile["city"] == query["city"], "city_mismatch", "city", query["city"], profile["city"])
-        check(query["category"] in profile["categories"], "category_mismatch", "categories", query["category"], profile["categories"])
-        if profile["calendar_range"] is not None:
-            check(profile["calendar_range"]["start"] <= query["date"] <= profile["calendar_range"]["end"],
-                  "date_outside_calendar", "calendar_range", query["date"], profile["calendar_range"])
-        check(query["date"] not in profile["busy_dates"], "date_busy", "busy_dates", query["date"], profile["busy_dates"])
-        if profile["available_dates"] is not None:
-            check(query["date"] in profile["available_dates"], "date_unavailable", "available_dates", query["date"], profile["available_dates"])
-        check(profile["price"] <= query["budget"], "over_budget", "price", query["budget"], profile["price"])
-        check(query["format"] in profile["formats"], "format_mismatch", "formats", query["format"], profile["formats"])
+        if query["city"] is not None:
+            check(profile["city"] == query["city"], "city_mismatch", "city", query["city"], profile["city"])
+        if query["category"] is not None:
+            check(query["category"] in profile["categories"], "category_mismatch", "categories", query["category"], profile["categories"])
+        if query["date"] is not None:
+            if profile["calendar_range"] is not None:
+                check(profile["calendar_range"]["start"] <= query["date"] <= profile["calendar_range"]["end"],
+                      "date_outside_calendar", "calendar_range", query["date"], profile["calendar_range"])
+            if partial and profile["calendar_range"] is None and profile["available_dates"] is None:
+                check(False, "date_unknown", "date", query["date"], None)
+            check(query["date"] not in profile["busy_dates"], "date_busy", "busy_dates", query["date"], profile["busy_dates"])
+            if profile["available_dates"] is not None:
+                check(query["date"] in profile["available_dates"], "date_unavailable", "available_dates", query["date"], profile["available_dates"])
+        if query["budget"] is not None:
+            check(profile["price"] <= query["budget"], "over_budget", "price", query["budget"], profile["price"])
+        if query["format"] is not None:
+            check(query["format"] in profile["formats"], "format_mismatch", "formats", query["format"], profile["formats"])
         required_languages = set(query["languages"])
         if query["language"] is not None:
             required_languages.add(query["language"])
@@ -190,30 +210,36 @@ def select_candidates(rows, request):
             continue
         # Все предпочтения проверены как обязательные условия. Ранжируем
         # по доле оставшегося бюджета, не выдумывая рейтинг качества.
-        remaining = query["budget"] - profile["price"]
-        score = 100.0 * (remaining / query["budget"]) if query["budget"] else 100.0
+        remaining = query["budget"] - profile["price"] if query["budget"] is not None else None
+        score = (100.0 * (remaining / query["budget"]) if query["budget"] else 100.0) if remaining is not None else 0.0
         accepted.append({
             "profile": profile,
             "score": score,
             "facts": {"matched_request": query.copy(), "budget_remaining_at_listed_price": remaining,
                       "presence_unlimited": profile["max_hours"] is None,
-                      "availability_basis": "explicit_available_date" if profile["available_dates"] is not None else "not_in_busy_dates",
+                      "availability_basis": ("not_checked" if query["date"] is None else
+                                             "explicit_available_date" if profile["available_dates"] is not None else "not_in_busy_dates"),
                       "price_requires_confirmation": profile["price_kind"] == "starting" or profile["price_imputed"] is True,
                       "city_imputed": profile["city_imputed"],
                       "price_imputed": profile["price_imputed"],
                       "synthetic": profile["synthetic"]},
         })
-    accepted.sort(key=lambda item: (-item["score"], item["profile"]["id"]))
-    for rank, item in enumerate(accepted[3:], start=4):
+    if query["budget"] is not None:
+        accepted.sort(key=lambda item: (-item["score"], item["profile"]["id"]))
+    else:
+        accepted.sort(key=lambda item: (item["profile"]["price"], item["profile"]["id"]))
+    shown = accepted if limit is None else accepted[:limit]
+    for rank, item in enumerate(accepted[len(shown):], start=len(shown) + 1):
         rejected.append({"id": item["profile"]["id"], "reasons": [
-            {"code": "outside_top_3", "rank": rank, "score": item["score"]}
+            {"code": "outside_top_3" if limit == 3 else "outside_limit", "rank": rank, "score": item["score"]}
         ]})
     return {
-        "candidates": accepted[:3],
+        "candidates": shown,
         "rejected": sorted(rejected, key=lambda item: item["id"]),
         "total": len(profiles),
         "eligible_count": len(accepted),
-        "ranking_rule": "score = 100 * (budget - price) / budget; при budget=0: 100; затем id по возрастанию как строка",
+        "ranking_rule": ("score = 100 * (budget - price) / budget; при budget=0: 100; затем id по возрастанию как строка"
+                         if query["budget"] is not None else "Цена по возрастанию; затем id по возрастанию как строка"),
     }
 
 

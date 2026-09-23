@@ -140,6 +140,46 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(self.request('POST', '/api/ai/recommend', json.dumps(query))[0], 400)
             model.assert_not_called()
 
+    def test_text_search_ignores_other_payload_fields_and_autosearches(self):
+        raw = {'request': {'city': 'алматы', 'category': 'ведущий', 'date': None,
+                           'budget': None, 'format': None, 'languages': [], 'duration_hours': None},
+               'preferences': [], 'questions': [], 'warnings': []}
+        payload = {'text': 'Нужен ведущий в Алматы', 'budget': 0, 'date': '1900-01-01',
+                   'city': 'Астана', 'language': 'несуществующий'}
+        with patch('server.complete_json', return_value=raw) as model:
+            status, _, body = self.request('POST', '/api/ai/search', json.dumps(payload))
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertTrue(response['parsed']['ready'])
+        self.assertTrue(response['result']['cards'])
+        self.assertIsNone(response['result']['request_date'])
+        self.assertTrue(all(c['city'] == 'алматы' for c in response['result']['cards']))
+        model.assert_called_once()
+        self.assertEqual(model.call_args.kwargs['payload']['description'], payload['text'])
+        self.assertNotIn('1900-01-01', str(model.call_args.kwargs['payload']))
+
+    def test_text_search_asks_only_for_ambiguity(self):
+        raw = {'request': {'city': 'алматы', 'category': 'ведущий', 'date': None,
+                           'budget': None, 'format': None, 'languages': [], 'duration_hours': None},
+               'preferences': [], 'questions': ['Какой год?'], 'warnings': []}
+        with patch('server.complete_json', return_value=raw), patch('server.assistant_recommend') as search:
+            status, _, body = self.request('POST', '/api/ai/search', '{"text":"Ведущий 10 октября"}')
+        self.assertEqual(status, 200)
+        self.assertIsNone(json.loads(body)['result'])
+        search.assert_not_called()
+
+    def test_text_search_returns_labeled_alternatives(self):
+        raw = {'request': {'city': 'алматы', 'category': 'ведущий', 'date': '2026-10-06',
+                           'budget': 0, 'format': 'свадьба', 'languages': [], 'duration_hours': None},
+               'preferences': [], 'questions': [], 'warnings': []}
+        with patch('server.complete_json', return_value=raw):
+            status, _, body = self.request('POST', '/api/ai/search', '{"text":"Ведущий бесплатно в Алматы"}')
+        self.assertEqual(status, 200)
+        result = json.loads(body)['result']
+        self.assertEqual(result['cards'], [])
+        self.assertTrue(result['alternatives'])
+        self.assertTrue(all(any(d['field'] == 'budget' for d in c['differences']) for c in result['alternatives']))
+
 
 if __name__ == '__main__':
     unittest.main()

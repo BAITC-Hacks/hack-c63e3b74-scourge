@@ -76,6 +76,29 @@ class BriefTests(unittest.TestCase):
         self.assertIsNone(suggestion['request']['language'])
         self.assertEqual(suggestion['request']['languages'], [])
 
+    def test_text_search_omitted_fields_are_not_required(self):
+        self.output['request'].update(date=None, budget=None, format=None, duration_hours=None, languages=[])
+        result = parse_brief(self.rows, 'Нужен ведущий в Алматы', lambda **kwargs: copy.deepcopy(self.output), partial=True)
+        self.assertTrue(result['ready'])
+        self.assertEqual(result['questions'], [])
+        self.assertIsNone(result['request']['date'])
+        self.assertIsNone(result['request']['budget'])
+        self.assertIsNone(result['request']['format'])
+
+    def test_text_search_unknown_requirements_are_never_dropped(self):
+        self.output['request'].update(city='Париж', category='Жонглёр', languages=['французский'])
+        result = parse_brief(self.rows, 'Нужен жонглёр в Париже на французском', lambda **kwargs: copy.deepcopy(self.output), partial=True)
+        self.assertEqual(result['request']['city'], 'париж')
+        self.assertEqual(result['request']['category'], 'жонглёр')
+        self.assertEqual(result['request']['languages'], ['французский'])
+
+    def test_text_search_ambiguity_still_needs_clarification(self):
+        self.output['request']['date'] = None
+        self.output['questions'] = ['Какой год указанной даты?']
+        result = parse_brief(self.rows, 'Нужен ведущий 10 октября', lambda **kwargs: copy.deepcopy(self.output), partial=True)
+        self.assertFalse(result['ready'])
+        self.assertEqual(result['questions'], ['Какой год указанной даты?'])
+
 
 if __name__ == '__main__':
     unittest.main()
