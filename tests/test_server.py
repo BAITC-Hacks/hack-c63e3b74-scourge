@@ -2,10 +2,12 @@ import http.client
 import json
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 
 from explanations import recommend
 from server import ROOT, load_profiles, make_handler
+from ai_client import AIError
 
 
 class ServiceTests(unittest.TestCase):
@@ -24,6 +26,8 @@ class ServiceTests(unittest.TestCase):
 
     def request(self, method, path, body=None):
         conn = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        if isinstance(body, str):
+            body = body.encode('utf-8')
         conn.request(method, path, body, {'Content-Type': 'application/json'})
         response = conn.getresponse()
         status, headers, content = response.status, dict(response.getheaders()), response.read()
@@ -88,6 +92,53 @@ class ServiceTests(unittest.TestCase):
         self.assertIn('Добавлен командой', result['cards'][0]['notices'])
         self.assertIn('Синтетический профиль', result['cards'][0]['notices'])
         self.assertEqual(sum(p['team_added'] for p in self.profiles), 0)
+
+    def test_ai_parse_over_http(self):
+        extracted = {'request': {'city': 'алматы', 'category': 'ведущий', 'date': None,
+                                'budget': None, 'format': 'свадьба', 'languages': ['русский', 'казахский'],
+                                'duration_hours': None},
+                     'preferences': ['без пошлых конкурсов'], 'questions': [], 'warnings': []}
+        with patch('server.complete_json', return_value=extracted):
+            status, _, body = self.request('POST', '/api/ai/parse', json.dumps({'text': 'Описание события'}))
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertFalse(result['ready'])
+        self.assertIsNone(result['request']['date'])
+        self.assertEqual(result['request']['languages'], ['русский', 'казахский'])
+        with patch('server.complete_json', side_effect=AIError('AI не подключён', 503)):
+            self.assertEqual(self.request('POST', '/api/ai/parse', '{"text":"Описание"}')[0], 503)
+
+    def test_ai_ranking_http_and_explicit_fallback(self):
+        query = json.loads((ROOT / 'examples/quality_requests.json').read_text())[0]['request']
+        query['preferences'] = ['спокойная атмосфера']
+
+        def unknown(**kwargs):
+            return {'matches': [{'id': p['id'], 'preferences': [
+                {'preference': pref, 'status': 'unknown', 'quote': ''}
+                for pref in kwargs['payload']['preferences']]} for p in kwargs['payload']['profiles']]}
+
+        with patch('server.complete_json', side_effect=unknown):
+            status, _, body = self.request('POST', '/api/ai/recommend', json.dumps(query))
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertTrue(result['ai']['applied'])
+        self.assertTrue(all(c['style_matches'][0]['status'] == 'unknown' for c in result['cards']))
+        with patch('server.complete_json', side_effect=AIError('Не удалось связаться с OpenAI')):
+            status, _, body = self.request('POST', '/api/ai/recommend', json.dumps(query))
+        self.assertEqual(status, 200)
+        fallback = json.loads(body)
+        self.assertFalse(fallback['ai']['applied'])
+        self.assertEqual(fallback['cards'], recommend(self.profiles, query)['cards'])
+        self.assertIn('не оценены', fallback['ai']['message'])
+
+    def test_ai_invalid_input_never_calls_model(self):
+        with patch('server.complete_json') as model:
+            for text in (None, '', 'x' * 4001):
+                self.assertEqual(self.request('POST', '/api/ai/parse', json.dumps({'text': text}))[0], 400)
+            query = json.loads((ROOT / 'examples/quality_requests.json').read_text())[0]['request']
+            query['preferences'] = ['x'] * 6
+            self.assertEqual(self.request('POST', '/api/ai/recommend', json.dumps(query))[0], 400)
+            model.assert_not_called()
 
 
 if __name__ == '__main__':

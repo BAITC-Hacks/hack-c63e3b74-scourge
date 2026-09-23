@@ -142,6 +142,12 @@ def compare_sources(excel_rows, html_rows):
 
 def select_candidates(rows, request):
     profiles = normalize_profiles(rows)
+    languages = request.get("languages", [])
+    if languages is None:
+        languages = []
+    if not isinstance(languages, list) or len(languages) > 10:
+        raise ValueError("languages: требуется массив до 10 языков")
+    languages = [label(value) for value in languages]
     query = {
         "city": label(request["city"]),
         "category": label(request["category"]),
@@ -149,6 +155,7 @@ def select_candidates(rows, request):
         "budget": number(request["budget"], "budget"),
         "format": label(request["format"]),
         "language": label(request["language"]) if request.get("language") is not None else None,
+        "languages": sorted(set(languages)),
         "duration_hours": number(request.get("duration_hours"), "duration_hours", nullable=True),
     }
     accepted, rejected = [], []
@@ -169,8 +176,12 @@ def select_candidates(rows, request):
             check(query["date"] in profile["available_dates"], "date_unavailable", "available_dates", query["date"], profile["available_dates"])
         check(profile["price"] <= query["budget"], "over_budget", "price", query["budget"], profile["price"])
         check(query["format"] in profile["formats"], "format_mismatch", "formats", query["format"], profile["formats"])
+        required_languages = set(query["languages"])
         if query["language"] is not None:
-            check(query["language"] in profile["languages"], "language_mismatch", "languages", query["language"], profile["languages"])
+            required_languages.add(query["language"])
+        if required_languages:
+            check(required_languages.issubset(profile["languages"]), "language_mismatch", "languages",
+                  sorted(required_languages), profile["languages"])
         if query["duration_hours"] is not None:
             check(profile["max_hours"] is None or profile["max_hours"] >= query["duration_hours"],
                   "duration_exceeded", "max_hours", query["duration_hours"], profile["max_hours"])

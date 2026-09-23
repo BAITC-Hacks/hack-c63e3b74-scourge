@@ -7,6 +7,9 @@ from urllib.parse import urlsplit
 
 from explanations import compare_dates, recommend
 from matching import normalize_profiles
+from ai_client import AIError, complete_json, public_status
+from ai_brief import parse_brief, strings
+from ai_ranking import recommend_with_style
 
 ROOT = Path(__file__).resolve().parent
 
@@ -31,6 +34,8 @@ def validate_request(value):
         raise ValueError("Укажите бюджет")
     if value.get("language") is not None and (not isinstance(value["language"], str) or len(value["language"]) > 100):
         raise ValueError("Некорректный язык")
+    if value.get("languages") is not None:
+        strings(value['languages'], count=10, length=100)
     return value
 
 
@@ -59,7 +64,7 @@ def make_handler(profiles):
         def do_GET(self):
             path = urlsplit(self.path).path
             if path == "/api/meta":
-                return self.send(200, meta)
+                return self.send(200, dict(meta, ai=public_status()))
             assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
                       "/style.css": ("style.css", "text/css")}
             if path not in assets:
@@ -69,7 +74,7 @@ def make_handler(profiles):
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            if path not in ("/api/recommend", "/api/compare"):
+            if path not in ("/api/recommend", "/api/compare", "/api/ai/parse", "/api/ai/recommend"):
                 return self.send(404, {"error": "Метод не найден"})
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.send(415, {"error": "Ожидается application/json"})
@@ -78,14 +83,35 @@ def make_handler(profiles):
                 if not 0 < length <= 16384:
                     return self.send(413, {"error": "Размер запроса должен быть от 1 до 16384 байт"})
                 payload = json.loads(self.rfile.read(length))
+                if path == "/api/ai/parse":
+                    if not isinstance(payload, dict):
+                        raise ValueError("Запрос должен быть JSON-объектом")
+                    result = parse_brief(profiles, payload.get('text'), complete_json)
+                    result['model'] = public_status()['model']
+                    return self.send(200, result)
                 request = validate_request(payload)
                 if path == "/api/compare":
                     other_date = request.get("compare_date")
                     if not isinstance(other_date, str) or not 0 < len(other_date) <= 100:
                         raise ValueError("Укажите compare_date для сравнения дат")
                     result = compare_dates(profiles, request, other_date)
+                elif path == '/api/ai/recommend':
+                    preferences = strings(request.get('preferences', []), count=5, length=200)
+                    # Validate hard constraints before attempting a model call.
+                    base = recommend(profiles, request)
+                    try:
+                        result = recommend_with_style(profiles, request, preferences, complete_json)
+                        result['ai']['model'] = public_status()['model']
+                    except (AIError, ValueError) as exc:
+                        result = base
+                        result['ai'] = {'applied': False,
+                                        'message': 'AI-пожелания сейчас не оценены. Показан обычный подбор по цене; обязательные условия соблюдены.'}
+                        if isinstance(exc, AIError):
+                            result['ai']['message'] += ' ' + str(exc)
                 else:
                     result = recommend(profiles, request)
+            except AIError as exc:
+                return self.send(exc.status, {'error': str(exc)})
             except (ValueError, KeyError, TypeError, OverflowError, RecursionError) as exc:
                 return self.send(400, {"error": "Некорректные параметры: " + str(exc)[:180]})
             self.send(200, result)

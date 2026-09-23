@@ -5,6 +5,16 @@
 <header><a href="/" class="brand">alem<span> / events</span></a><span class="tag">HackAlem · демо</span></header>
 <main>
 <section class="intro"><p class="eyebrow">ВАШЕ СОБЫТИЕ. ВАША КОМАНДА.</p><h1>Найдём тех, кто<br>сделает ваш день.</h1><p>Подрядчики под дату, формат и бюджет.<br>До трёх вариантов — с понятным объяснением каждого выбора.</p><div id="catalog" class="catalog">Загружаем каталог…</div></section>
+<section class="ai-panel" aria-labelledby="ai-title">
+<div><p class="eyebrow">AI-ПОМОЩНИК</p><h2 id="ai-title">Опишите событие своими словами</h2><p class="ai-intro">Заполним условия и учтём пожелания к атмосфере. Перед подбором вы сможете всё проверить.</p></div>
+<form id="ai-form">
+<label for="ai-brief">Какой праздник вы планируете?</label>
+<textarea id="ai-brief" rows="3" maxlength="4000" required placeholder="Камерная свадьба в Алматы 10 октября 2026. Нужен ведущий на русском и казахском, до 800 000 ₸, на 5 часов. Хочется спокойной атмосферы без шумных конкурсов."></textarea>
+<div class="ai-actions"><button id="ai-parse" type="submit" class="primary" disabled>Разобрать описание <span>↗</span></button><p class="hint">Описание события и профили для оценки пожеланий передаются в OpenAI.</p></div>
+<p id="ai-status" class="ai-status" role="status" aria-live="polite">Проверяем доступность AI…</p>
+<ul id="ai-feedback" class="ai-feedback" hidden></ul>
+</form>
+</section>
 <section class="workspace">
 <aside class="search-panel"><div class="panel-title"><h2>Расскажите о событии</h2><span>01</span></div>
 <form id="search-form">
@@ -14,16 +24,21 @@
 <label>Мероприятие<select name="format" required></select></label>
 <label>Категория<select name="category" required></select></label>
 <label>Бюджет, ₸<input name="budget" type="number" min="0" step="any" value="3000000" required></label>
-<div class="two-fields"><label>Часы <span class="optional">необязательно</span><input name="duration_hours" type="number" min="0" step="any" placeholder="Любая длительность"></label><label>Язык <span class="optional">необязательно</span><select name="language"></select></label></div>
+<label>Часы <span class="optional">необязательно</span><input name="duration_hours" type="number" min="0" step="any" placeholder="Любая длительность"></label>
+<fieldset class="languages-field"><legend>Языки <span class="optional">необязательно · исполнитель должен знать все выбранные</span></legend><div id="language-options"></div></fieldset>
+<label for="style-preferences">Пожелания к атмосфере <span class="optional">необязательно · до 5 пожеланий, каждое с новой строки</span></label>
+<textarea id="style-preferences" rows="3" maxlength="1004" placeholder="Камерная атмосфера&#10;Спокойное ведение"></textarea>
+<p class="hint preference-hint">AI ищет подтверждения в описаниях. Если подтверждения нет, покажем «нужно уточнить».</p>
 <button type="submit" class="primary" id="submit" disabled>Подобрать команду <span>↗</span></button>
 <label class="compare-toggle"><input type="checkbox" id="compare-toggle">Сравнить с другой датой</label>
 <label id="compare-field" hidden>Вторая дата<input type="date" id="compare-date" value="2026-10-01"></label>
+<p id="compare-note" class="hint" hidden>Сравниваем доступность на двух датах. Пожелания к атмосфере не учитываются; порядок — по цене, затем по id.</p>
 </form></aside>
 <section class="results-panel"><div class="panel-title"><h2>Подборка для вас</h2><span>02</span></div>
 <div class="demos"><span>Попробуйте сценарий</span><div id="demo-buttons"></div></div>
 <p id="status" role="status" aria-live="polite">Настройте условия или выберите готовый сценарий.</p>
 <div id="results" aria-live="polite"></div>
 </section></section>
-<section class="pipeline"><p class="eyebrow">КАК ЭТО РАБОТАЕТ</p><h2>От данных к объяснимому выбору</h2><div class="steps"><p><b>01 / Сверяем</b>CSV и HTML по id. Полные данные берём из CSV.</p><p><b>02 / Проверяем</b>Город, категорию, дату, бюджет, формат, язык и часы.</p><p><b>03 / Подбираем</b>Меньшая цена — выше в списке. При равенстве сортируем по id.</p><p><b>04 / Объясняем</b>Показываем факты, ограничения и причины отсева без выдуманных преимуществ.</p></div></section>
+<section class="pipeline"><p class="eyebrow">КАК ЭТО РАБОТАЕТ</p><h2>От данных к объяснимому выбору</h2><div class="steps"><p><b>01 / Понимаем</b>AI переносит описание события в форму. Вы проверяете и уточняете условия.</p><p><b>02 / Проверяем</b>Город, категорию, дату, бюджет, формат, языки и часы по сверенным данным CSV и HTML.</p><p><b>03 / Подбираем</b>AI оценивает пожелания по описаниям прошедших фильтры профилей. Без пожеланий сортируем по цене, затем id.</p><p><b>04 / Объясняем</b>Показываем факты, цитаты и причины отсева. Неподтверждённые пожелания нужно уточнить.</p></div></section>
 </main><footer>Цены указаны «от». Стоимость и доступность нужно подтвердить у подрядчика. Синтетические профили отмечены в карточках.</footer>
 </body></html>

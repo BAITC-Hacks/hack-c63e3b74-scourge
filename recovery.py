@@ -17,6 +17,8 @@ def recovery_suggestions(rows, request, result):
 
     def verify(field, value, title):
         query = dict(request, **{field: value})
+        if field == 'languages' and value == []:
+            query['language'] = None
         count = select_candidates(local, query)["eligible_count"]
         if not count:
             return False
@@ -52,7 +54,9 @@ def recovery_suggestions(rows, request, result):
         budget = min(over_budget)
         price = f"{budget:,.2f}".rstrip("0").rstrip(".").replace(",", " ")
         verify("budget", budget, f"Бюджет {price} ₸ — по цене «от»")
-    if request.get("language") is not None:
+    if request.get("languages"):
+        verify("languages", [], "Не ограничивать языки")
+    elif request.get("language") is not None:
         verify("language", None, "Не ограничивать язык")
     shorter = [p["max_hours"] for p in local
                if failures[p["id"]] == {"duration_exceeded"}]
